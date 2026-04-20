@@ -140,6 +140,7 @@ export LLM_BASE_URL=http://localhost:4000/v1    # ou https://llm.at-tech.cloud/v
 | `LLAMA_PORT` | `8080` | Port hôte |
 | `LLAMA_CTX` | `32768` | Taille de contexte |
 | `LLAMA_NGL` | `99` | Couches GPU (99 = tout) |
+| `LLAMA_MEMORY` | `48g` | Limite RAM du conteneur (protection OOM host) |
 | `LLAMA_IMAGE` | `ghcr.io/ggml-org/llama.cpp:server-cuda` | Image Docker |
 | `LLAMA_CONTAINER_NAME` | `llama-server` | Nom du conteneur |
 | `LLAMA_STARTUP_TIMEOUT` | `300` | Timeout chargement modèle (s) |

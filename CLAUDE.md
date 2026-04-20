@@ -53,6 +53,8 @@ docker compose --profile tunnel down    # stop everything including tunnel
 
 - **Gemma 4 31B Q4_K_XL on a 24 GB GPU OOMs without `--parallel 1`.** llama.cpp server defaults to `--parallel 4`, which quadruples the KV cache. At `-c 32768`, KV cache alone asks for ~6 GB; model weights are ~18 GB → total hits the ceiling. Keep `--parallel 1` in `_llama_start_container`.
 
+- **Host RAM OOM is a real risk even with `-ngl 99`.** Observed in practice: the container's anon-rss climbed to ~56 GB over a few hours of use (CUDA pinned memory and CUDA_Host buffers grow with request volume). On a 64 GB box that triggers the kernel OOM killer → `exit 137`. Mitigations in place: `--restart unless-stopped` (auto-respawn after OOM) and `--memory 48g` via `LLAMA_MEMORY` (container dies inside its own cgroup before dragging the host down). If these kick in regularly, lower `LLAMA_CTX` or raise `LLAMA_MEMORY` — not both.
+
 - **`--rm` on the server container hides startup errors.** The container is removed on exit, so `docker logs llama-server` after a crash returns "No such container". To debug a startup failure, re-run the same `docker run` command in the foreground (no `-d`, no `--rm`). See the `_llama_start_container` function for the exact args.
 
 - **`llama-bench` binary isn't in PATH inside the `:full-cuda` image.** It lives at `/app/llama-bench`. The Docker invocation uses `--entrypoint /app/llama-bench` — do not shorten to `llama-bench`.

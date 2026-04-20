@@ -57,7 +57,13 @@ _llama_start_container() {
     model_dir="$(dirname "$LLAMA_MODEL_PATH")"
     model_file="$(basename "$LLAMA_MODEL_PATH")"
 
-    docker run -d --rm --gpus all \
+    # `--restart unless-stopped` auto-respawns the container on OOM/crash
+    # (observed: CUDA pinned memory can balloon anon-rss to ~56 GB over time
+    # and trigger the kernel OOM killer; exit 137).
+    # `--memory` caps the container's RSS at a value that still fits the
+    # working set but forces early failure rather than dragging the host down.
+    docker run -d --restart unless-stopped --gpus all \
+        --memory "${LLAMA_MEMORY:-48g}" \
         --name "$LLAMA_CONTAINER_NAME" \
         --label "llama.config-hash=$(_llama_config_hash)" \
         -p "${LLAMA_PORT}:8080" \
