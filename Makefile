@@ -3,34 +3,27 @@ SHELL := /bin/bash
 
 GATEWAY := gateway
 WRAPPER := ./llama.sh
-MASTER   = $$(grep LITELLM_MASTER_KEY $(GATEWAY)/.env | cut -d= -f2)
 
-# Allow `make key-create name=alice budget=5 rpm=60 models=gemma4`
-name    ?= default
-budget  ?= 100
-rpm     ?= 120
-models  ?= gemma4
-key     ?=
-user    ?=
+.PHONY: help install download-model serve stop status logs-server bench bench-native \
+        up up-tunnel down restart logs ps keys open-ui open-tunnel nuke
 
-.PHONY: help install download-model serve stop status logs-server bench bench-native up up-tunnel down restart logs ps new-key key-create key-list key-info key-delete key-allow open-ui open-tunnel nuke
 help:  ## Show this help
 	@echo "Usage: make <target>"
 	@echo ""
 	@echo "Setup:"
-	@grep -E '^(install|download-model):.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^(install|download-model):.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 	@echo ""
-	@echo "Llama.cpp server (wrapper):"
-	@grep -E '^(serve|stop|status|logs-server|bench|bench-native):.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+	@echo "Llama.cpp server:"
+	@grep -E '^(serve|stop|status|logs-server|bench|bench-native):.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "Gateway (LiteLLM + Postgres):"
-	@grep -E '^(up|up-tunnel|down|restart|logs|ps):.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^(up|up-tunnel|down|restart|logs|ps):.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 	@echo ""
-	@echo "Keys (LiteLLM admin):"
-	@grep -E '^(new-key|key-create|key-list|key-info|key-delete|key-allow):.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+	@echo "API keys:"
+	@grep -E '^(keys):.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "Maintenance:"
-	@grep -E '^(open-ui|open-tunnel|nuke):.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^(open-ui|open-tunnel|nuke):.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
 # ----- setup -----
 
@@ -42,7 +35,7 @@ download-model:  ## Download Gemma 4 31B Q4_K_XL (~18.8 GB) to ~/models/gemma4
 	wget -c --directory-prefix=$$HOME/models/gemma4 \
 	  "https://huggingface.co/unsloth/gemma-4-31b-it-GGUF/resolve/main/gemma-4-31B-it-UD-Q4_K_XL.gguf"
 
-# ----- llama.cpp server (via wrapper functions) -----
+# ----- llama.cpp server -----
 
 serve:  ## Start the llama.cpp server container (triggers model load)
 	@bash -c 'source $(WRAPPER) && llama "ping"' >/dev/null
@@ -82,48 +75,14 @@ logs:  ## Tail LiteLLM logs (Ctrl-C to exit)
 ps:  ## Show gateway container state
 	cd $(GATEWAY) && docker compose ps
 
-# ----- keys (LiteLLM admin API) -----
+# ----- keys -----
 
-new-key:  ## Interactive guided flow to create a key (recommended)
-	@bash ./scripts/generate_key.sh
-
-key-create:  ## One-liner key creation: make key-create name=alice budget=10 rpm=60 models=gemma4
-	@curl -s -X POST http://localhost:4000/key/generate \
-	  -H "Authorization: Bearer $(MASTER)" \
-	  -H "Content-Type: application/json" \
-	  -d '{"key_alias":"$(name)","models":["$(models)"],"max_budget":$(budget),"rpm_limit":$(rpm)}' \
-	  | jq '{key, alias: .key_alias, models, max_budget, rpm_limit}'
-	@echo ""
-	@echo "⚠  If user was auto-created with 'no-default-models', also run:"
-	@echo "   make key-allow user=<user_id> models=gemma4"
-
-key-list:  ## List all API keys (requires jq)
-	@curl -s "http://localhost:4000/key/list?return_full_object=true" \
-	  -H "Authorization: Bearer $(MASTER)" \
-	  | jq '.keys[] | {alias: .key_alias, user_id, models, spend, rpm_limit}'
-
-key-info:  ## Show info for one key: make key-info key=sk-...
-	@[[ -n "$(key)" ]] || { echo "usage: make key-info key=sk-..."; exit 1; }
-	@curl -s "http://localhost:4000/key/info?key=$(key)" \
-	  -H "Authorization: Bearer $(MASTER)" | jq '.info'
-
-key-delete:  ## Revoke a key: make key-delete key=sk-...
-	@[[ -n "$(key)" ]] || { echo "usage: make key-delete key=sk-..."; exit 1; }
-	@curl -s -X POST http://localhost:4000/key/delete \
-	  -H "Authorization: Bearer $(MASTER)" \
-	  -H "Content-Type: application/json" \
-	  -d '{"keys":["$(key)"]}' | jq
-
-key-allow:  ## Grant model access at user level: make key-allow user=<user_id> models=gemma4
-	@[[ -n "$(user)" ]] || { echo "usage: make key-allow user=<user_id> models=gemma4"; exit 1; }
-	@curl -s -X POST http://localhost:4000/user/update \
-	  -H "Authorization: Bearer $(MASTER)" \
-	  -H "Content-Type: application/json" \
-	  -d '{"user_id":"$(user)","models":["$(models)"]}' | jq '{user_id, models}'
+keys:  ## Guided CLI to manage API keys (create, list, info, delete, fix access)
+	@bash ./scripts/keys.sh
 
 # ----- maintenance -----
 
-open-ui:  ## Open LiteLLM admin UI in browser (localhost)
+open-ui:  ## Open LiteLLM admin UI in browser
 	xdg-open http://localhost:4000/ui 2>/dev/null || echo "→ http://localhost:4000/ui"
 
 open-tunnel:  ## Open public URL in browser
