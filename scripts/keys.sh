@@ -46,18 +46,25 @@ ask_nonempty() {
     while :; do
         answer=$(ask "$prompt")
         [[ -n "$answer" ]] && { echo "$answer"; return; }
-        c_red "  ✗ required"; echo
+        c_red "  ✗ required" >&2; echo >&2
     done
 }
 
-ask_numeric() {
+ask_int() {
     local prompt="$1" default="$2" answer
     while :; do
         answer=$(ask "$prompt" "$default")
-        if [[ "$answer" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-            echo "$answer"; return
-        fi
-        c_red "  ✗ not a number"; echo
+        [[ "$answer" =~ ^[0-9]+$ ]] && { echo "$answer"; return; }
+        c_red "  ✗ not a whole number" >&2; echo >&2
+    done
+}
+
+ask_float() {
+    local prompt="$1" default="$2" answer
+    while :; do
+        answer=$(ask "$prompt" "$default")
+        [[ "$answer" =~ ^[0-9]+(\.[0-9]+)?$ ]] && { echo "$answer"; return; }
+        c_red "  ✗ not a number" >&2; echo >&2
     done
 }
 
@@ -74,10 +81,20 @@ ask_yesno() {
 # ──────────────────────────────────────────────────────────────
 
 preflight() {
+    # Guided flow requires a TTY; piped stdin would loop forever in ask_nonempty.
+    [[ -t 0 ]] || die "interactive terminal required (don't pipe stdin into this CLI)"
+
     command -v jq   >/dev/null || die "jq required — sudo apt install jq"
     command -v curl >/dev/null || die "curl required"
 
     [[ -f "$ENV_FILE" ]] || die "no $ENV_FILE — run 'make up' first"
+
+    # .env format assumed: KEY=VALUE per line (no `export`, no quoting).
+    # Refuse duplicate master-key lines — joined newlines in $MASTER would
+    # inject \n into the Authorization header and fail opaquely.
+    local n_master
+    n_master=$(grep -c '^LITELLM_MASTER_KEY=' "$ENV_FILE")
+    (( n_master == 1 )) || die "expected exactly 1 LITELLM_MASTER_KEY= line in $ENV_FILE (found $n_master)"
 
     MASTER=$(grep '^LITELLM_MASTER_KEY=' "$ENV_FILE" | cut -d= -f2-)
     [[ -n "$MASTER" ]] || die "LITELLM_MASTER_KEY empty in $ENV_FILE"
@@ -110,11 +127,17 @@ pick_key() {
     # Emits the selected key's alias to stdout, or nothing on cancel.
     # Keys without an alias are skipped (can't be addressed safely via the API).
     local msg="${1:-Select a key}"
-    local keys_json count
+    local keys_json count total dropped
     keys_json=$(fetch_keys)
+    total=$(jq -r '.keys | length' <<<"$keys_json")
     # Filter to keys that have an alias — the rest can't be addressed.
     keys_json=$(jq '{keys: [.keys[] | select(.key_alias != null and .key_alias != "")]}' <<<"$keys_json")
     count=$(jq -r '.keys | length' <<<"$keys_json")
+    dropped=$((total - count))
+
+    (( dropped > 0 )) && {
+        warn "$dropped key(s) without alias hidden (create-via-UI drift?)" >&2
+    }
 
     if [[ "$count" == "0" ]]; then
         warn "no keys with an alias (aliases are required to manage keys via this CLI)"
@@ -153,8 +176,8 @@ cmd_create() {
 
     alias=$(ask_nonempty    "Alias (e.g. alice, slack-bot)")
     user=$(ask              "User ID (empty = auto-generate)")
-    budget=$(ask_numeric    "Budget USD"         "100")
-    rpm=$(ask_numeric       "Rate limit req/min" "120")
+    budget=$(ask_float      "Budget USD"         "100")
+    rpm=$(ask_int           "Rate limit req/min" "120")
     models_in=$(ask         "Models (comma-separated)" "gemma4")
 
     models_json=$(jq -cn --arg s "$models_in" \
@@ -267,7 +290,12 @@ cmd_delete() {
     local response
     response=$(key_delete_api "$payload")
 
-    if jq -e '.deleted_keys | index($a) // false' --arg a "$key_alias" <<<"$response" >/dev/null 2>&1; then
+    # Catch non-JSON responses (e.g. HTML 502 from a proxy in front of LiteLLM).
+    if ! jq -e . <<<"$response" >/dev/null 2>&1; then
+        die "non-JSON response from /key/delete: ${response:0:120}"
+    fi
+
+    if jq -e --arg a "$key_alias" '.deleted_keys | index($a) // false' <<<"$response" >/dev/null; then
         ok "deleted '$key_alias'"
     else
         die "delete failed: $(jq -r '.error.message // .detail // .' <<<"$response")"
