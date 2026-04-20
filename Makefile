@@ -13,7 +13,7 @@ models  ?= gemma4
 key     ?=
 user    ?=
 
-.PHONY: help
+.PHONY: help install download-model serve stop status logs-server bench bench-native up up-tunnel down restart logs ps new-key key-create key-list key-info key-delete key-allow open-ui open-tunnel nuke
 help:  ## Show this help
 	@echo "Usage: make <target>"
 	@echo ""
@@ -27,7 +27,7 @@ help:  ## Show this help
 	@grep -E '^(up|up-tunnel|down|restart|logs|ps):.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "Keys (LiteLLM admin):"
-	@grep -E '^(key-create|key-list|key-info|key-delete|key-allow):.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^(new-key|key-create|key-list|key-info|key-delete|key-allow):.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "Maintenance:"
 	@grep -E '^(open-ui|open-tunnel|nuke):.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -84,7 +84,10 @@ ps:  ## Show gateway container state
 
 # ----- keys (LiteLLM admin API) -----
 
-key-create:  ## Create an API key: make key-create name=alice budget=10 rpm=60 models=gemma4
+new-key:  ## Interactive guided flow to create a key (recommended)
+	@bash ./scripts/generate_key.sh
+
+key-create:  ## One-liner key creation: make key-create name=alice budget=10 rpm=60 models=gemma4
 	@curl -s -X POST http://localhost:4000/key/generate \
 	  -H "Authorization: Bearer $(MASTER)" \
 	  -H "Content-Type: application/json" \
