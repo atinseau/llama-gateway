@@ -5,7 +5,8 @@ GATEWAY := gateway
 WRAPPER := ./llama.sh
 
 .PHONY: help install download-model serve stop status logs-server bench bench-native \
-        up up-tunnel down restart logs ps keys open-ui open-tunnel nuke
+        up up-tunnel down restart logs ps keys monitor monitor-gpu monitor-containers \
+        open-ui open-tunnel nuke
 
 help:  ## Show this help
 	@echo "Usage: make <target>"
@@ -21,6 +22,9 @@ help:  ## Show this help
 	@echo ""
 	@echo "API keys:"
 	@grep -E '^(keys):.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
+	@echo ""
+	@echo "Monitoring:"
+	@grep -E '^(monitor|monitor-gpu|monitor-containers):.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "Maintenance:"
 	@grep -E '^(open-ui|open-tunnel|nuke):.*##' $(MAKEFILE_LIST) | awk -F':.*##' '{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -79,6 +83,17 @@ ps:  ## Show gateway container state
 
 keys:  ## Guided CLI to manage API keys (create, list, info, delete, fix access)
 	@bash ./scripts/keys.sh
+
+# ----- monitoring -----
+
+monitor:  ## Real-time dashboard: CPU, RAM, GPU, containers (Ctrl-C to exit)
+	@bash ./scripts/monitor.sh
+
+monitor-gpu:  ## Just GPU: watch nvidia-smi every second
+	@watch -n 1 -c nvidia-smi
+
+monitor-containers:  ## Just containers: docker stats live
+	@docker stats
 
 # ----- maintenance -----
 
