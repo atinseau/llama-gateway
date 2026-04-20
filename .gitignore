@@ -1,0 +1,32 @@
+# Secrets — never commit
+gateway/.env
+gateway/.env.*.local
+.keys/
+*.pem
+*.key
+
+# Docker volumes (Postgres data)
+gateway/data/
+
+# User API keys — never in the repo
+LLM_API_KEY*
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+.zed/
+
+# Node (legacy, in case of future examples)
+node_modules/
+package-lock.json
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

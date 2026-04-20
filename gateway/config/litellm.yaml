@@ -1,0 +1,22 @@
+# LiteLLM routing config.
+# Reload via UI or by restarting the litellm container.
+
+model_list:
+  - model_name: gemma4
+    litellm_params:
+      # "openai/..." tells LiteLLM to speak OpenAI protocol to the backend.
+      # llama.cpp's /v1/... endpoints are OpenAI-compatible.
+      model: openai/gemma4
+      api_base: http://host.docker.internal:8080/v1
+      api_key: "sk-dummy"  # llama.cpp doesn't require one (yet)
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  store_model_in_db: true
+
+litellm_settings:
+  # Drop OpenAI params that the backend doesn't support instead of erroring.
+  drop_params: true
+  # Count tokens and compute usage locally (since llama.cpp doesn't bill).
+  set_verbose: false

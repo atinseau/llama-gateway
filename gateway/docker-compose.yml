@@ -1,0 +1,68 @@
+name: llama-gateway
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: litellm-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: litellm
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - gateway
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: litellm
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Local-only for now; Cloudflare Tunnel will be added later to expose it publicly.
+    ports:
+      - "127.0.0.1:4000:4000"
+    environment:
+      DATABASE_URL: postgresql://litellm:${POSTGRES_PASSWORD}@postgres:5432/litellm
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?missing LITELLM_MASTER_KEY in .env}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?missing LITELLM_SALT_KEY in .env}
+      STORE_MODEL_IN_DB: "True"
+      UI_USERNAME: ${UI_USERNAME:-admin}
+      UI_PASSWORD: ${UI_PASSWORD:?missing UI_PASSWORD in .env}
+    volumes:
+      - ./config/litellm.yaml:/app/config.yaml:ro
+    command:
+      - "--config=/app/config.yaml"
+      - "--port=4000"
+      - "--num_workers=1"
+    # So the container can reach the llama.cpp server running on the host's port 8080.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - gateway
+
+  # Cloudflare Tunnel — exposes LiteLLM on https://<your-subdomain> with no open ports.
+  # Only starts when you run with `--profile tunnel`.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    depends_on:
+      - litellm
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env (see README)}
+    networks:
+      - gateway
+
+networks:
+  gateway:
+    driver: bridge
