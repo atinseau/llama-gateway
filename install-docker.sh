@@ -24,8 +24,13 @@ chmod a+r /etc/apt/keyrings/docker.asc
 # Ubuntu 25.10 n'a pas encore de repo Docker dédié : fallback sur noble (24.04)
 CODENAME="$(. /etc/os-release && echo "$VERSION_CODENAME")"
 case "$CODENAME" in
-    questing|oracular|plucky) DOCKER_CODENAME=noble ;;
-    *) DOCKER_CODENAME="$CODENAME" ;;
+    # Known LTS codenames published by Docker
+    jammy|noble) DOCKER_CODENAME="$CODENAME" ;;
+    # Anything else (interim releases, future names) → fall back to latest LTS
+    *)
+        echo "  ⚠ codename '$CODENAME' not a known Docker LTS — falling back to noble"
+        DOCKER_CODENAME=noble
+        ;;
 esac
 echo "  codename hôte: $CODENAME → repo docker: $DOCKER_CODENAME"
 

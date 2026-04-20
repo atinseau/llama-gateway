@@ -33,7 +33,12 @@ for i in {1..60}; do
         break
     fi
     sleep 1
-    [[ $i -eq 60 ]] && { echo "  ✗ timeout"; docker compose logs --tail 30 litellm; exit 1; }
+    [[ $i -eq 60 ]] && {
+        echo "  ✗ timeout"
+        docker compose ps
+        docker compose logs --tail 20 postgres litellm
+        exit 1
+    }
 done
 
 # Source .env for the final summary
