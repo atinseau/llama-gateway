@@ -122,7 +122,7 @@ Dans `~/.config/opencode/opencode.json` :
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
-    "llama": {
+    "local": {
       "npm": "@ai-sdk/openai-compatible",
       "name": "Gemma 4",
       "options": {
@@ -137,7 +137,9 @@ Dans `~/.config/opencode/opencode.json` :
 }
 ```
 
-Puis dans opencode : `/models` → `llama/gemma4`.
+**⚠ Évite le provider name `llama`** — il entre en collision avec un provider déjà présent dans le registre opencode, ton modèle sera masqué du TUI.
+
+Puis dans opencode : **`Ctrl+X M`** → sélectionne `local/gemma4` (ou `F2` pour cycle rapide).
 
 ---
 
